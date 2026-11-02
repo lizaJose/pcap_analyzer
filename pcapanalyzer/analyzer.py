@@ -14,8 +14,6 @@ DISPLAY_FILTER = (
     "|| rdp || icmp || icmpv6 || arp || bootp || (tcp.flags.syn == 1 && tcp.flags.ack == 0)"
 )
 
-WINDOWS_TSHARK = r"C:\Program Files\Wireshark\tshark.exe"
-
 
 @dataclass
 class Event:
@@ -29,7 +27,15 @@ class Event:
 
 
 def find_tshark():
-    return shutil.which("tshark") or (WINDOWS_TSHARK if os.path.exists(WINDOWS_TSHARK) else None)
+    path = shutil.which("tshark")
+    if path:
+        return path
+    for program_files in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if program_files:
+            candidate = os.path.join(program_files, "Wireshark", "tshark.exe")
+            if os.path.isfile(candidate):
+                return candidate
+    return None
 
 
 def _values(layer, name):

@@ -5,8 +5,19 @@ DNS, SSH, FTP, Telnet, SMB, RDP, ICMP, ARP and DHCP.
 
 ## Requirements
 - Python 3.9+
-- Wireshark (includes `tshark`)
+- Wireshark (including `tshark`), available on `PATH`
 - `pip install -r requirements.txt`
+
+### Windows
+Install Wireshark and make sure `tshark.exe` is on `PATH`. The analyzer also checks the standard Wireshark
+install folders; if needed, pass its location with `--tshark`.
+
+### Linux
+Install Wireshark/TShark using your distribution's package manager and ensure `tshark` is on `PATH`.
+For example, on Debian/Ubuntu: `sudo apt install wireshark`.
+
+Then install the Python dependencies with `python -m pip install -r requirements.txt` (use `python3` if that's
+the command for your Python installation).
 
 ## Usage
 ```
@@ -28,7 +39,8 @@ with the button or by dragging it onto the page.
 Only use this feature on networks and devices you are authorized to test. ARP spoofing can disrupt network
 operation and expose traffic.
 
-Available from console menu option **9** and the web UI's **ARP spoofing** section. Requires Npcap and
-Administrator/root privileges. Select an interface and authorized target(s); the tool can scan the local subnet,
-optionally enable IP forwarding, and capture traffic to a `.pcap` file. The suggested capture filename is editable;
+Available from console menu option **9** and the web UI's **ARP spoofing** section. On Windows it requires Npcap
+and Administrator privileges; on Linux it requires libpcap and root privileges. Select an interface and authorized
+target(s); the tool can scan the local subnet, optionally enable IP forwarding, and capture traffic to a `.pcap` file.
+The suggested capture filename is editable;
 existing filenames are not overwritten. Stop the session to restore ARP mappings and the previous forwarding setting.
