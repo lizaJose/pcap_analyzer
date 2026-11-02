@@ -1,0 +1,2 @@
+pyshark>=0.6
+scapy>=2.5

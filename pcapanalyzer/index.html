@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PCAP Analyzer</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--line:#2a3342;--text:#e6edf3;--mute:#8b98a9;--accent:#3b82f6;
+--green:#22c55e;--red:#ef4444;--yellow:#eab308;--purple:#a78bfa;--cyan:#22d3ee}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+aside{width:230px;background:var(--panel);border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.logo{font-weight:700;font-size:18px;padding:4px 10px 12px;color:var(--accent)}
+nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:var(--mute);cursor:pointer;font-size:14px;user-select:none}
+nav a:hover{background:var(--panel2);color:var(--text)}
+nav a.active{background:var(--accent);color:#fff}
+nav a .n{margin-left:auto;font-size:11px;background:#0003;border-radius:10px;padding:1px 8px}
+nav a:not(.active) .n{background:var(--panel2)}
+.side-foot{margin-top:auto;padding:10px}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-size:14px;width:100%}
+button:disabled{opacity:.5;cursor:wait}
+#fileinfo{font-size:12px;color:var(--mute);margin-top:8px;word-break:break-all}
+#status{font-size:12px;color:var(--yellow);margin-top:6px}
+main{flex:1;padding:24px 32px;min-width:0}
+h2{margin:0 0 4px;font-size:22px} .desc{color:var(--mute);margin:0 0 18px;font-size:14px}
+h3{font-size:14px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:26px 0 10px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;cursor:pointer}
+.stat:hover{border-color:var(--accent)} .stat b{display:block;font-size:26px} .stat span{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h4{margin:0 0 8px;font-size:15px}
+.row{font-size:13px;margin:4px 0;color:var(--text)} .row .k{color:var(--mute)}
+.bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+input[type=text],select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:14px}
+input[type=text]{flex:1;min-width:220px}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.item-head{display:flex;align-items:center;gap:14px;padding:12px 14px;cursor:pointer}
+.item-head:hover{background:var(--panel2)}
+.avatar{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff;flex-shrink:0}
+.main{flex:1;min-width:0}
+.title{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{font-size:12px;color:var(--mute);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600;margin-right:4px;white-space:nowrap}
+.b-ok{background:#14532d;color:#86efac}.b-warn{background:#713f12;color:#fde68a}.b-bad{background:#7f1d1d;color:#fecaca}
+.b-info{background:#1e3a5f;color:#93c5fd}.b-mute{background:var(--panel2);color:var(--mute)}
+.count{font-size:12px;color:var(--mute);text-align:right;white-space:nowrap}
+.item-body{display:none;border-top:1px solid var(--line);padding:10px 14px 12px;background:#0003;font-size:13px}
+.item.open .item-body{display:block}
+.item-body div{padding:3px 0;overflow-wrap:anywhere} .item-body .k{color:var(--mute)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500}
+.empty{text-align:center;color:var(--mute);padding:50px 20px;border:2px dashed var(--line);border-radius:12px}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tab{padding:7px 14px;border-radius:8px;background:var(--panel);border:1px solid var(--line);color:var(--mute);cursor:pointer;font-size:14px;user-select:none}
+.tab:hover{color:var(--text)} .tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab .n{margin-left:8px;font-size:11px;background:#0003;border-radius:10px;padding:1px 8px}
+#drop{display:none;position:fixed;inset:0;background:#000a;z-index:9;align-items:center;justify-content:center;font-size:26px}
+.hbar{display:flex;align-items:center;gap:8px;font-size:13px;margin:5px 0}
+.hbar .lab{width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbar .fill{height:10px;border-radius:5px;background:var(--accent)} .hbar .num{color:var(--mute)}
+.cf-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:12px 0 6px}
+.cf-row{display:flex;align-items:center;gap:7px;font-size:12px;padding:3px 0;cursor:pointer;color:var(--text);word-break:break-all}
+.cf-row input{width:auto}
+</style></head><body>
+<aside>
+  <div class="logo">PCAP Analyzer</div>
+  <nav id="nav"></nav>
+  <div class="side-foot">
+    <input type="file" id="file" accept=".pcap,.pcapng,.cap" style="display:none">
+    <button id="up">Upload pcap</button>
+    <div id="status"></div><div id="fileinfo">No file loaded</div>
+    <div id="clientFilter" style="display:none"></div>
+  </div>
+</aside>
+<main id="view"></main>
+<div id="drop">Drop the pcap file here</div>
+<script>
+const $=(s)=>document.querySelector(s);
+// All pcap-derived text goes through textContent, never innerHTML.
+function h(tag,cls,...kids){const e=document.createElement(tag);if(cls)e.className=cls;
+  for(const k of kids){if(k==null||k===false)continue;e.append(k.nodeType?k:document.createTextNode(String(k)))}return e}
+const fmtTime=ts=>new Date(ts*1000).toLocaleTimeString();
+const fmtDT=ts=>new Date(ts*1000).toLocaleString();
+const COLORS=['#3b82f6','#22c55e','#a78bfa','#f97316','#ec4899','#14b8a6','#eab308','#ef4444','#06b6d4','#84cc16'];
+const colorFor=s=>{let x=0;for(const c of s)x=(x*31+c.charCodeAt(0))>>>0;return COLORS[x%COLORS.length]};
+const REMOTE_PORTS={22:'SSH',23:'Telnet',3389:'RDP',5900:'VNC'};
+
+// Separates sites a person actually visits from background traffic (ads, trackers, CDNs, telemetry).
+const ADS_DOMAINS=['doubleclick.net','googlesyndication.com','googleadservices.com','google-analytics.com','googletagmanager.com',
+ 'googletagservices.com','amazon-adsystem.com','adnxs.com','criteo.com','criteo.net','taboola.com','outbrain.com','scorecardresearch.com',
+ 'hotjar.com','hotjar.io','optimizely.com','visualwebsiteoptimizer.com','vwo.com','mrf.io','marfeel.com','adsrvr.org','rubiconproject.com',
+ 'pubmatic.com','openx.net','casalemedia.com','demdex.net','omtrdc.net','everesttech.net','newrelic.com','nr-data.net','sentry.io',
+ 'segment.io','segment.com','mixpanel.com','amplitude.com','branch.io','adjust.com','appsflyer.com','onetrust.com','cookielaw.org',
+ 'cookiebot.com','didomi.io','quantserv.com','quantcount.com','chartbeat.net','chartbeat.com','parsely.com','moatads.com','adform.net',
+ 'smartadserver.com','teads.tv','sharethrough.com','bidswitch.net','3lift.com','tapad.com','bluekai.com','krxd.net','facebook.net',
+ 'connect.facebook.net','clarity.ms','bat.bing.com','hs-analytics.net','hubspot.com','hsforms.com','tiqcdn.com','ensighten.com',
+ 'permutive.com','permutive.app','id5-sync.com','liadm.com','lijit.com','sovrn.com','yieldmo.com','media.net','adsafeprotected.com',
+ 'doubleverify.com','crwdcntrl.net','agkn.com','rlcdn.com','mathtag.com','turn.com','serving-sys.com','contextweb.com','gumgum.com',
+ 'ay.delivery','ads-twitter.com','analytics.tiktok.com','tiktokv.com','byteoversea.com','sc-static.net','adtrafficquality.google','tradedoubler.com',
+ 'tinypass.com','piano.io','zeotap.com','newsroom.bi','ocmthood.com','privacy-center.org','ebxcdn.com','npaproxy.goskope.com','pixelcounter.elmundo.es'];
+const INFRA_DOMAINS=['gstatic.com','googleapis.com','googleusercontent.com','ggpht.com','ytimg.com','googlevideo.com','gvt1.com','gvt2.com',
+ 'fbcdn.net','twimg.com','scdn.co','akamaiedge.net','akamaihd.net','akamai.net','akamaized.net','cloudfront.net','fastly.net','fastlylb.net',
+ 'edgekey.net','edgesuite.net','cloudflare.com','cloudflare.net','cloudflareinsights.com','jsdelivr.net','cdnjs.com','unpkg.com','azureedge.net',
+ 'windowsupdate.com','msftconnecttest.com','msedge.net','microsoftonline.com','events.data.microsoft.com','digicert.com','letsencrypt.org',
+ 'trafficmanager.net','amazonaws.com','apple-dns.net','mzstatic.com','uecdn.es','nflxvideo.net','nflximg.net','nflxext.com','nflxso.net',
+ 'akadns.net','firefox-portal-detection.com','msftncsi.com','llnwd.net','cdn77.org','b-cdn.net','imgix.net','wp.com','gravatar.com','fontawesome.com','typekit.net','bootstrapcdn.com',
+ 'ocsp.pki.goog','pki.goog','ggpht.com','whatsapp.net','icloud-content.com','live.com','office.net','sfx.ms'];
+const BG_TOKENS=new Set(['ad','ads','adserver','adservice','adsystem','analytics','tracking','tracker','telemetry','metrics','pixel','beacon',
+ 'static','assets','ocsp','crl','rtb','tagmanager','consent','cmp','collect','syndication','experiment','experiments','stats','sync','img','imgs','images']);
+const inList=(host,list)=>list.some(d=>host===d||host.endsWith('.'+d));
+
+// Subdomains/CDNs that belong to a well-known site are folded into it.
+const ALIASES={'cdninstagram.com':'instagram.com','fbcdn.net':'facebook.com','redditmedia.com':'reddit.com','redditstatic.com':'reddit.com',
+ 'redd.it':'reddit.com','unidadeditorial.es':'elmundo.es','el-mundo.net':'elmundo.es','uecdn.es':'elmundo.es','gotinder.com':'tinder.com',
+ 'twimg.com':'x.com','twitter.com':'x.com','t.co':'x.com','googlevideo.com':'youtube.com','ytimg.com':'youtube.com','youtu.be':'youtube.com',
+ 'google.es':'google.com','googleusercontent.com':'google.com','nflxvideo.net':'netflix.com','nflximg.net':'netflix.com','scdn.co':'spotify.com',
+ 'tiktokcdn.com':'tiktok.com','licdn.com':'linkedin.com','ggpht.com':'google.com'};
+// Domains where every subdomain is a different site (blogs, personal pages).
+const SHARED_HOSTING=['blogspot.com','blogspot.com.es','github.io','wordpress.com','tumblr.com','medium.com','substack.com','netlify.app','vercel.app','pages.dev'];
+const SLD=['co','com','org','net','gov','edu','ac'];
+function rawRoot(host){
+  host=host.toLowerCase();
+  for(const sh of SHARED_HOSTING){if(host.endsWith('.'+sh))return host.split('.').slice(-(sh.split('.').length+1)).join('.')}
+  const p=host.split('.');
+  if(p.length<=2)return host;
+  const n=(p[p.length-1].length===2&&SLD.includes(p[p.length-2]))?3:2;
+  return p.slice(-n).join('.');
+}
+const rootOf=host=>{const r=rawRoot(host);return ALIASES[r]||r};
+function classify(host){
+  host=host.toLowerCase();
+  if(inList(host,ADS_DOMAINS))return 'Ads & trackers';
+  if(inList(host,INFRA_DOMAINS))return 'CDN & infrastructure';
+  const t=host.split(/[.-]/);
+  if(t.some(x=>BG_TOKENS.has(x)))return 'Ads & trackers';
+  if(t.some(x=>/^(cdn|edge|cache|media-?cdn)\d*$/.test(x)))return 'CDN & infrastructure';
+  return null;
+}
+const SECTIONS=[['overview','Overview'],['web','Websites'],['remote','Remote access'],['files','Files'],['dns','DNS'],['network','Network'],['all','All activity'],['arp','ARP spoofing']];
+
+let data=null, current='overview', derived=null, arpPoll=null, selectedClients=null;
+
+function groupSites(sites,dns){
+  // A site is "main" when it has its own front page (apex or www.) and is not ads/CDN. Everything else is supporting traffic.
+  const hostsByRoot=new Map();
+  const add=h=>{const r=rootOf(h);if(!hostsByRoot.has(r))hostsByRoot.set(r,new Set());hostsByRoot.get(r).add(h)};
+  sites.forEach((_,h)=>add(h));dns.forEach((_,h)=>add(h));
+  const mainRoot=new Map();
+  hostsByRoot.forEach((hs,r)=>mainRoot.set(r,[...hs].some(h=>h.startsWith('www.')||h===rawRoot(h))&&!classify(r)));
+  const groups=new Map();
+  sites.forEach(s=>{
+    const r=rootOf(s.host);
+    let g=groups.get(r);
+    if(!g){g={root:r,host:r,service:null,https:false,http:false,inferred:true,clients:new Set(),count:0,first:s.first,last:s.last,
+      urls:new Set(),agents:new Set(),members:[]};groups.set(r,g)}
+    g.members.push(s);g.count+=s.count;s.clients.forEach(c=>g.clients.add(c));
+    g.first=Math.min(g.first,s.first);g.last=Math.max(g.last,s.last);
+    g.https=g.https||s.https;g.http=g.http||s.http;if(!s.inferred)g.inferred=false;
+    s.urls.forEach(u=>g.urls.add(u));s.agents.forEach(a=>g.agents.add(a));
+  });
+  groups.forEach(g=>{
+    const m=g.members;
+    const front=m.find(x=>x.host==='www.'+g.root)||m.find(x=>x.host===g.root)||m.find(x=>x.host.startsWith('www.'));
+    g.host=front?front.host:g.root;
+    g.service=(front&&front.service)||m.map(x=>x.service).find(Boolean)||null;
+    g.members.sort((a,b)=>b.count-a.count);
+    g.background=mainRoot.get(g.root)?null:(classify(g.root)||'Supporting domain');
+  });
+  return {list:[...groups.values()],isMain:d=>!!mainRoot.get(rootOf(d))};
+}
+
+function derive(d){
+  // When a client filter is active, keep events that involve a selected host (as source or destination).
+  const ev=selectedClients?d.events.filter(e=>selectedClients.has(e.src)||selectedClients.has(e.dst)):d.events;
+  const sites=new Map();
+  for(const e of ev){
+    if(e.category!=='Web'||!e.details.host)continue;
+    const k=e.details.host;
+    let s=sites.get(k);
+    if(!s){s=sites.set(k,{host:k,service:e.details.service||null,https:false,http:false,clients:new Set(),count:0,first:e.ts,last:e.ts,urls:new Set(),agents:new Set()}).get(k)}
+    s.count++;s.clients.add(e.src);s.last=Math.max(s.last,e.ts);s.first=Math.min(s.first,e.ts);
+    if(e.protocol==='HTTPS')s.https=true;else{s.http=true;if(e.details.url)s.urls.add(e.details.url);if(e.details.user_agent)s.agents.add(e.details.user_agent)}
+  }
+  // Connections to 80/443 whose IP was resolved via DNS count as visits when no SNI/HTTP request was captured.
+  const domainService=new Map();
+  for(const e of ev){if(e.category==='DNS'&&e.details.service)domainService.set(e.details.domain,e.details.service)}
+  for(const e of ev){
+    if(e.category!=='Connection'||![80,443].includes(e.details.port)||!e.details.domain)continue;
+    const k=e.details.domain;
+    let s=sites.get(k);
+    if(!s){s=sites.set(k,{host:k,service:domainService.get(k)||null,https:false,http:false,inferred:true,clients:new Set(),count:0,first:e.ts,last:e.ts,urls:new Set(),agents:new Set()}).get(k)}
+    else if(!s.inferred)continue;
+    s.count++;s.clients.add(e.src);s.last=Math.max(s.last,e.ts);s.first=Math.min(s.first,e.ts);
+    if(e.details.port===443)s.https=true;else s.http=true;
+  }
+  const dns=new Map();
+  for(const e of ev){
+    if(e.category!=='DNS'||!e.details.domain)continue;
+    let r=dns.get(e.details.domain);
+    if(!r){r=dns.set(e.details.domain,{domain:e.details.domain,service:null,clients:new Set(),queries:0,answers:new Set(),first:e.ts}).get(e.details.domain)}
+    if(e.details.answers){e.details.answers.split(', ').forEach(a=>r.answers.add(a))}
+    else{r.queries++;r.clients.add(e.src);if(e.details.service)r.service=e.details.service}
+  }
+  const remote=new Map();
+  for(const e of ev){
+    const port=e.details.port;
+    const isRemote=e.category==='Remote access'||(e.category==='Connection'&&REMOTE_PORTS[port]);
+    if(!isRemote)continue;
+    const proto=e.category==='Connection'?REMOTE_PORTS[port]:e.protocol;
+    const k=proto+'|'+e.src+'|'+e.dst;
+    let r=remote.get(k);
+    if(!r){r=remote.set(k,{proto,src:e.src,dst:e.dst,count:0,first:e.ts,last:e.ts,software:null,events:[]}).get(k)}
+    r.count++;r.first=Math.min(r.first,e.ts);r.last=Math.max(r.last,e.ts);r.events.push(e);
+    if(e.details.software)r.software=e.details.software;
+  }
+  const files=new Map();
+  for(const e of ev){
+    if(e.category!=='Files')continue;
+    const k=e.protocol+'|'+e.src+'|'+e.dst;
+    let r=files.get(k);
+    if(!r){r=files.set(k,{proto:e.protocol,src:e.src,dst:e.dst,first:e.ts,events:[]}).get(k)}
+    r.events.push(e);
+  }
+  const byCat=c=>ev.filter(e=>e.category===c);
+  const grouped=groupSites(sites,dns);
+  return {sites:grouped.list,isMainDomain:grouped.isMain,dns:[...dns.values()],remote:[...remote.values()],files:[...files.values()],
+          network:byCat('Network'),all:ev};
+}
+
+// ---------- shared UI pieces
+function item(avatarText,color,title,sub,badges,right,bodyRows){
+  const body=h('div','item-body',...bodyRows.map(r=>h('div','',...r)));
+  const head=h('div','item-head',
+    h('div','avatar',avatarText),
+    h('div','main',h('div','title',title),h('div','sub',sub)),
+    h('div','',...badges),
+    h('div','count',...right));
+  head.firstChild.style.background=color;
+  const it=h('div','item',head,body);
+  head.onclick=()=>it.classList.toggle('open');
+  return it;
+}
+const badge=(t,c)=>h('span','badge b-'+c,t);
+const kv=(k,v)=>[h('span','k',k+': '),String(v)];
+function toolbar(...els){return h('div','bar',...els)}
+function search(ph,onInput){const i=h('input');i.type='text';i.placeholder=ph;i.oninput=()=>onInput(i.value.toLowerCase());return i}
+function header(title,desc){return [h('h2','',title),h('p','desc',desc)]}
+function empty(msg){return h('div','empty',msg)}
+
+// ---------- views
+const VIEWS={
+overview(){
+  const d=derived,out=[...header('Overview','What is going on in this capture, at a glance.')];
+  const stat=(n,l,sec)=>{const s=h('div','stat',h('b','',n),h('span','',l));s.onclick=()=>go(sec);return s};
+  const main=d.sites.filter(s=>!s.background);
+  out.push(h('div','stats',
+    stat(data.hosts.length,'Hosts','all'),stat(main.length,'Websites','web'),
+    stat(d.remote.length,'Remote sessions','remote'),stat(d.files.length,'File transfers','files'),
+    stat(d.dns.length,'DNS names','dns'),stat(data.events.length,'Events','all')));
+  out.push(h('h3','','Most visited websites'));
+  const top=[...main].sort((a,b)=>b.count-a.count).slice(0,8);
+  if(!top.length)out.push(empty('No web traffic found.'));
+  const max=top.length?top[0].count:1;
+  top.forEach(s=>{const f=h('div','fill');f.style.width=Math.max(4,200*s.count/max)+'px';f.style.background=colorFor(s.host);
+    out.push(h('div','hbar',h('div','lab',s.service||s.host),f,h('span','num',s.count)))});
+  out.push(h('h3','','Hosts'));
+  const g=h('div','grid');
+  data.hosts.forEach(x=>{
+    const c=h('div','card',h('h4','',x.ip));
+    [['Sites',derived.sites.filter(g=>!g.background&&g.clients.has(x.ip)).map(g=>g.host)],['Remote access',x.remote],['Files',x.files]].forEach(([k,v])=>{
+      if(v.length)c.append(h('div','row',...kv(k,v.slice(0,6).join(', ')+(v.length>6?' …':''))))});
+    c.append(h('div','row',...kv('Events',x.events)));g.append(c)});
+  out.push(g);return out;
+},
+web(){
+  const out=[...header('Websites','Sites you actually visit are shown first. Ads, trackers and CDN traffic are kept in "Background".')];
+  const list=h('div'),sel=h('select'),sortSel=h('select'),tabs=h('div','tabs'),dnsBox=h('div');
+  ['All hosts',...new Set(derived.sites.flatMap(s=>[...s.clients]))].forEach((c,i)=>{const o=h('option','',c);o.value=i?c:'';sel.append(o)});
+  [['count','Most visits'],['first','First seen'],['host','Name']].forEach(([v,l])=>{const o=h('option','',l);o.value=v;sortSel.append(o)});
+  let q='',tab='main';
+  const isMain=s=>!s.background;
+  const tabDefs=[['main','Main sites',s=>isMain(s)],['bg','Background',s=>!isMain(s)],['all','All',()=>true]];
+  const drawTabs=()=>{
+    tabs.replaceChildren();
+    tabDefs.forEach(([id,label,f])=>{
+      const b=h('a',id===tab?'tab active':'tab',label,h('span','n',derived.sites.filter(f).length));
+      b.onclick=()=>{tab=id;drawTabs();draw()};tabs.append(b)});
+  };
+  const draw=()=>{
+    list.replaceChildren();
+    const tabFn=tabDefs.find(t=>t[0]===tab)[2];
+    let rows=derived.sites.filter(s=>tabFn(s)&&(!sel.value||s.clients.has(sel.value))&&(!q||(s.host+(s.service||'')).toLowerCase().includes(q)));
+    const sorters={count:(a,b)=>b.count-a.count,first:(a,b)=>a.first-b.first,host:(a,b)=>a.host.localeCompare(b.host)};
+    rows.sort(sorters[sortSel.value]);
+    if(!rows.length)list.append(empty(tab==='main'?'No main websites match. Check the Background tab.':'No websites match.'));
+    rows.forEach(s=>{
+      const badges=[];
+      if(s.background)badges.push(badge(s.background,'mute'));
+      if(s.service)badges.push(badge(s.service,'info'));
+      if(s.https)badges.push(badge('HTTPS','ok'));
+      if(s.http)badges.push(badge(s.inferred?'HTTP':'HTTP (unencrypted)',s.inferred?'mute':'warn'));
+      if(s.inferred)badges.push(badge('inferred from DNS','mute'));
+      const subs=s.members.length>1?s.members.map(m=>kv(m.host,m.count+(m.count===1?' connection':' connections'))):[];
+      const body=[kv('Visited by',[...s.clients].join(', ')),kv('First seen',fmtDT(s.first)),kv('Last seen',fmtDT(s.last))];
+      if(subs.length){body.push([h('span','k','Hosts used by this site ('+subs.length+'):')]);subs.forEach(r=>body.push(r))}
+      s.urls.forEach(u=>body.push(kv('URL',u)));
+      s.agents.forEach(u=>body.push(kv('Browser',u)));
+      list.append(item(s.host.replace(/^www\./,'')[0].toUpperCase(),s.background?'#475569':colorFor(s.host),s.host,
+        'Visited by '+[...s.clients].join(', ')+(s.members.length>1?' · '+s.members.length+' hosts':''),badges,[s.count+(s.count===1?' connection':' connections'),h('br'),fmtTime(s.first)],body));
+    });
+    // DNS-only lookups, filtered with the same main/background split
+    dnsBox.replaceChildren();
+    const visited=new Set(derived.sites.map(s=>s.host));
+    const only=derived.dns.filter(r=>r.queries&&!visited.has(r.domain)&&(tab==='all'||(tab==='main')===derived.isMainDomain(r.domain))
+      &&(!q||r.domain.toLowerCase().includes(q)));
+    if(only.length){
+      dnsBox.append(h('h3','','Looked up but no visit seen (DNS only)'));
+      const t=h('table','',h('tr','',h('th','','Domain'),h('th','','Service'),h('th','','Asked by')));
+      only.forEach(r=>t.append(h('tr','',h('td','',r.domain),h('td','',r.service||''),h('td','',[...r.clients].join(', ')))));
+      dnsBox.append(t);
+    }
+  };
+  sel.onchange=draw;sortSel.onchange=draw;
+  drawTabs();
+  out.push(tabs,toolbar(search('Search websites (youtube, example.com...)',v=>{q=v;draw()}),sel,sortSel));
+  out.push(list,dnsBox);draw();
+  return out;
+},
+remote(){
+  const out=[...header('Remote access','SSH, Telnet, RDP and VNC sessions between hosts.')];
+  if(!derived.remote.length)return [...out,empty('No remote access sessions found.')];
+  derived.remote.sort((a,b)=>a.first-b.first).forEach(r=>{
+    const bad=r.proto==='Telnet';
+    const badges=[badge(r.proto,bad?'bad':'info')];
+    if(bad)badges.push(badge('Unencrypted','bad'));
+    const body=[];
+    if(r.software)body.push(kv('Software',r.software));
+    body.push(kv('First seen',fmtDT(r.first)),kv('Last seen',fmtDT(r.last)));
+    r.events.forEach(e=>body.push([h('span','k',fmtTime(e.ts)+'  '),e.summary]));
+    out.push(item(r.proto.slice(0,3),bad?'#ef4444':colorFor(r.proto),r.src+'  →  '+r.dst,
+      r.software?'Software: '+r.software:'Connection attempt seen',badges,      [r.count+(r.count===1?' event':' events'),h('br'),fmtTime(r.first)],body));
+  });
+  return out;
+},
+files(){
+  const out=[...header('Files','File transfer and shared-folder activity (FTP, SMB).')];
+  if(!derived.files.length)return [...out,empty('No file activity found.')];
+  derived.files.forEach(r=>{
+    const body=r.events.map(e=>[h('span','k',fmtTime(e.ts)+'  '),e.summary]);
+    out.push(item(r.proto.slice(0,3),colorFor(r.proto),r.src+'  →  '+r.dst,r.events[0].summary,
+      [badge(r.proto,r.proto==='FTP'?'warn':'info')],[r.events.length+(r.events.length===1?' event':' events'),h('br'),fmtTime(r.first)],body));
+  });
+  return out;
+},
+dns(){
+  const out=[...header('DNS','Names that hosts asked about, and the answers they got. Lookups for well-known sites are shown first; ads, trackers and infrastructure noise are kept in "Background".')];
+  const rows=derived.dns.map(r=>({...r,background:derived.isMainDomain(r.domain)?null:(classify(rootOf(r.domain))||'Supporting domain')}));
+  const list=h('div'),sel=h('select'),sortSel=h('select'),tabs=h('div','tabs');
+  ['All hosts',...new Set(rows.flatMap(r=>[...r.clients]))].forEach((c,i)=>{const o=h('option','',c);o.value=i?c:'';sel.append(o)});
+  [['queries','Most queries'],['first','First seen'],['domain','Name']].forEach(([v,l])=>{const o=h('option','',l);o.value=v;sortSel.append(o)});
+  let q='',tab='main';
+  const tabDefs=[['main','Main sites',r=>!r.background],['bg','Background',r=>!!r.background],['all','All',()=>true]];
+  const drawTabs=()=>{
+    tabs.replaceChildren();
+    tabDefs.forEach(([id,label,f])=>{
+      const b=h('a',id===tab?'tab active':'tab',label,h('span','n',rows.filter(f).length));
+      b.onclick=()=>{tab=id;drawTabs();draw()};tabs.append(b)});
+  };
+  const draw=()=>{
+    list.replaceChildren();
+    const tabFn=tabDefs.find(t=>t[0]===tab)[2];
+    let filtered=rows.filter(r=>tabFn(r)&&(!sel.value||r.clients.has(sel.value))&&(!q||(r.domain+(r.service||'')).toLowerCase().includes(q)));
+    const sorters={queries:(a,b)=>b.queries-a.queries,first:(a,b)=>a.first-b.first,domain:(a,b)=>a.domain.localeCompare(b.domain)};
+    filtered.sort(sorters[sortSel.value]);
+    if(!filtered.length)list.append(empty(tab==='main'?'No main-site lookups match. Check the Background tab.':'No DNS lookups match.'));
+    filtered.forEach(r=>{
+      const badges=[];
+      if(r.background)badges.push(badge(r.background,'mute'));
+      if(r.service)badges.push(badge(r.service,'info'));
+      if(!r.queries)badges.push(badge('answer only','mute'));
+      const body=[kv('Asked by',[...r.clients].join(', ')||'—'),kv('Queries',r.queries),kv('First seen',fmtDT(r.first))];
+      if(r.answers.size)body.push(kv('Answers',[...r.answers].join(', ')));
+      list.append(item(r.domain[0].toUpperCase(),r.background?'#475569':colorFor(r.domain),r.domain,
+        (r.queries?r.queries+(r.queries===1?' query':' queries'):'Answer only')+([...r.clients].length?' · '+[...r.clients].join(', '):''),
+        badges,[r.queries||'—',h('br'),fmtTime(r.first)],body));
+    });
+  };
+  sel.onchange=draw;sortSel.onchange=draw;
+  drawTabs();
+  out.push(tabs,toolbar(search('Search domains...',v=>{q=v;draw()}),sel,sortSel));
+  out.push(list);draw();
+  return out;
+},
+network(){
+  const out=[...header('Network','ICMP (ping), ARP and DHCP chatter, split by type.')];
+  if(!derived.network.length)return [...out,empty('No network-level events found.')];
+  const colors={ARP:'warn',DHCP:'ok',ICMP:'info'};
+  const types=[...new Set(derived.network.map(e=>e.protocol))];
+  const tabDefs=[['all','All',()=>true],...types.map(t=>[t,t,e=>e.protocol===t])];
+  let tab='all';
+  const tabs=h('div','tabs'),body=h('tbody'),out2=h('div');
+  const table=h('table','',h('thead','',h('tr','',h('th','','Time'),h('th','','Type'),h('th','','What happens'))),body);
+  const drawTabs=()=>{
+    tabs.replaceChildren();
+    tabDefs.forEach(([id,label,f])=>{
+      const b=h('a',id===tab?'tab active':'tab',label,h('span','n',derived.network.filter(f).length));
+      b.onclick=()=>{tab=id;drawTabs();draw()};tabs.append(b)});
+  };
+  const draw=()=>{
+    body.replaceChildren();out2.replaceChildren();
+    const f=tabDefs.find(t=>t[0]===tab)[2];
+    const rows=derived.network.filter(f);
+    if(!rows.length){out2.append(empty('No events of this type.'));return}
+    rows.forEach(e=>body.append(h('tr','',h('td','',fmtTime(e.ts)),h('td','',badge(e.protocol,colors[e.protocol]||'info')),h('td','',e.summary))));
+    out2.append(table);
+  };
+  drawTabs();
+  out.push(tabs,out2);
+  draw();
+  return out;
+},
+all(){
+  const out=[...header('All activity','Every event in chronological order.')];
+  const body=h('tbody'),sel=h('select');
+  ['All categories',...new Set(derived.all.map(e=>e.category))].forEach((c,i)=>{const o=h('option','',c);o.value=i?c:'';sel.append(o)});
+  let q='';
+  const draw=()=>{body.replaceChildren();
+    derived.all.filter(e=>(!sel.value||e.category===sel.value)&&(!q||(e.summary+JSON.stringify(e.details)).toLowerCase().includes(q)))
+      .forEach(e=>body.append(h('tr','',h('td','',fmtTime(e.ts)),h('td','',badge(e.protocol,'mute')),h('td','',e.summary))))};
+  sel.onchange=draw;
+  out.push(toolbar(search('Search (youtube, ssh, 192.168...)',v=>{q=v;draw()}),sel));
+  out.push(h('table','',h('thead','',h('tr','',h('th','','Time'),h('th','','Type'),h('th','','What happens'))),body));
+  draw();return out;
+},
+arp(){
+  const out=[...header('ARP spoofing / MITM','Intercept traffic between hosts and the gateway, and optionally capture it. Only use this on networks and devices you are explicitly authorized to test.')];
+  const warn=h('div','card');
+  warn.append(h('h4','',badge('Authorized testing only','bad')),
+    h('div','row','ARP spoofing disrupts normal network operation. Intercepting traffic you are not authorized to see is illegal in most places.'));
+  out.push(warn);
+
+  const msg=h('div','');msg.style.color='var(--yellow)';msg.style.margin='10px 0';
+  const ifaceSel=h('select'),gwInput=h('input'),cidrInput=h('input'),manualInput=h('input'),scanBtn=h('button','','Scan network for hosts');
+  gwInput.type='text';gwInput.placeholder='Gateway IP';
+  cidrInput.type='text';cidrInput.placeholder='Subnet to scan (e.g. 192.168.1.0/24)';
+  manualInput.type='text';manualInput.placeholder='Or type target IP(s) manually, comma-separated';
+  scanBtn.style.width='auto';
+
+  const cfg=h('div','card');
+  cfg.append(h('h4','','1. Interface and gateway'),
+    h('div','bar',ifaceSel,gwInput));
+  const hostsList=h('div');
+  cfg.append(h('h4','','2. Choose target(s)'),
+    h('div','bar',cidrInput,scanBtn),
+    manualInput,
+    h('div','',hostsList));
+  const bidirChk=h('input'),fwdChk=h('input'),capChk=h('input'),captureName=h('input');
+  [bidirChk,fwdChk,capChk].forEach(c=>c.type='checkbox');
+  bidirChk.checked=true;fwdChk.checked=true;capChk.checked=true;
+  captureName.type='text';captureName.maxLength=120;
+  captureName.placeholder='mitm_YYYYMMDD_HHMMSS.pcap';
+  let captureNameEdited=false;
+  captureName.oninput=()=>{captureNameEdited=true};
+  const optRow=(chk,label)=>{const l=h('label','row',chk,' '+label);l.style.display='flex';l.style.alignItems='center';l.style.gap='8px';return l};
+  cfg.append(h('h4','','3. Options'),
+    optRow(bidirChk,'Two-way: also poison the gateway (full MITM, not just one direction)'),
+    optRow(fwdChk,'Enable IP forwarding automatically (keeps the victim online)'),
+    optRow(capChk,'Capture the intercepted traffic to a .pcap file'),
+    h('div','bar',h('label','','Capture filename'),captureName));
+  const startBtn=h('button','','Start spoofing'),stopBtn=h('button','','Stop && restore');
+  stopBtn.style.background='var(--red)';stopBtn.disabled=true;
+  cfg.append(h('div','bar',startBtn,stopBtn));
+  out.push(cfg,msg);
+
+  const statusBox=h('div','card');
+  out.push(h('h3','','Status'),statusBox);
+
+  let hostChecks={};
+  const renderHosts=hosts=>{
+    hostsList.replaceChildren();hostChecks={};
+    if(!hosts.length){hostsList.append(empty('No hosts found. Try scanning again.'));return}
+    hosts.forEach(hst=>{
+      const cb=h('input');cb.type='checkbox';cb.value=hst.ip;hostChecks[hst.ip]=cb;
+      const bits=[hst.mac];
+      if(hst.vendor)bits.push(hst.vendor);
+      if(hst.hostname)bits.push(hst.hostname);
+      if(hst.os_guess)bits.push(hst.os_guess);
+      const row=h('label','row',cb,' '+hst.ip+'  ',h('span','sub',bits.join(' · ')));
+      row.style.display='flex';row.style.alignItems='center';row.style.gap='8px';row.style.cursor='pointer';
+      hostsList.append(row);
+    });
+  };
+
+  const setFormEnabled=on=>{
+    [ifaceSel,gwInput,cidrInput,manualInput,scanBtn,bidirChk,fwdChk,capChk,startBtn].forEach(e=>e.disabled=!on);
+    captureName.disabled=!on||!capChk.checked;
+    Object.values(hostChecks).forEach(c=>c.disabled=!on);
+    stopBtn.disabled=on;
+  };
+  capChk.onchange=()=>{captureName.disabled=!capChk.checked};
+
+  const renderStatus=s=>{
+    statusBox.replaceChildren();
+    if(!s.running&&!captureNameEdited&&s.suggested_capture_name)captureName.value=s.suggested_capture_name;
+    if(!s.running){statusBox.append(h('div','row','Not running.'));setFormEnabled(true);return}
+    setFormEnabled(false);
+    statusBox.append(
+      h('div','row',...kv('Interface',s.iface)),
+      h('div','row',...kv('Gateway',s.gateway||'(none)')),
+      h('div','row',...kv('Target(s)',s.targets.join(', '))),
+      h('div','row',...kv('Running for',s.elapsed+'s')));
+    if(s.capture_path)statusBox.append(h('div','row',...kv('Capturing to',s.capture_path+' ('+(s.captured??0)+' packets so far)')));
+    if(s.forwarding_note)statusBox.append(h('div','row',...kv('IP forwarding',s.forwarding_note)));
+  };
+  const refreshStatus=async()=>{
+    try{const r=await fetch('/api/arp/status');renderStatus(await r.json())}catch(e){}
+  };
+  arpPoll=setInterval(refreshStatus,1000);
+
+  (async()=>{
+    msg.textContent='Loading interfaces...';
+    try{
+      const r=await fetch('/api/arp/interfaces');const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      ifaceSel.replaceChildren();
+      j.interfaces.forEach(i=>{const o=h('option','',i.desc+' ('+i.ip+')');o.value=i.name;o.dataset.ip=i.ip;ifaceSel.append(o)});
+      if(!j.interfaces.length)msg.textContent='No usable network interfaces were found.';
+      else if(j.gateway){gwInput.value=j.gateway;msg.textContent=''}
+      else msg.textContent='';
+      if(!j.is_admin){
+        msg.textContent='Administrator/root privileges are required to send ARP packets and change IP forwarding. Restart this tool elevated.';
+        startBtn.disabled=true;scanBtn.disabled=true;
+      }
+    }catch(e){msg.textContent='Error: '+e.message}
+    refreshStatus();
+  })();
+
+  scanBtn.onclick=async()=>{
+    const iface=ifaceSel.value;
+    if(!iface){msg.textContent='Select an interface first.';return}
+    let cidr=cidrInput.value.trim();
+    if(!cidr){
+      const ip=ifaceSel.selectedOptions[0]&&ifaceSel.selectedOptions[0].dataset.ip;
+      if(ip)cidr=ip.replace(/\.\d+$/,'.0/24');
+    }
+    if(!cidr){msg.textContent='Enter a subnet to scan (e.g. 192.168.1.0/24).';return}
+    cidrInput.value=cidr;scanBtn.disabled=true;msg.textContent='Scanning '+cidr+' and identifying devices... this can take a few seconds.';
+    try{
+      const r=await fetch('/api/arp/scan?iface='+encodeURIComponent(iface)+'&cidr='+encodeURIComponent(cidr));
+      const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      renderHosts(j.hosts);msg.textContent=j.hosts.length+' host(s) found on '+cidr+'.';
+    }catch(e){msg.textContent='Error: '+e.message}
+    scanBtn.disabled=false;
+  };
+
+  startBtn.onclick=async()=>{
+    const iface=ifaceSel.value;
+    if(!iface){msg.textContent='Select an interface.';return}
+    const gateway=gwInput.value.trim();
+    if(!gateway){msg.textContent='Enter the gateway IP.';return}
+    const checked=Object.values(hostChecks).filter(c=>c.checked).map(c=>c.value);
+    const manual=manualInput.value.split(',').map(s=>s.trim()).filter(Boolean);
+    const targets=[...new Set([...checked,...manual])];
+    if(!targets.length){msg.textContent='Select at least one target (scan and tick a host, or type an IP).';return}
+    if(!confirm('Start ARP spoofing against '+targets.length+' host(s): '+targets.join(', ')+
+      '?\nOnly do this on a network and devices you are explicitly authorized to test.'))return;
+    startBtn.disabled=true;msg.textContent='Starting...';
+    try{
+      const r=await fetch('/api/arp/start',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({iface,gateway,targets,bidirectional:bidirChk.checked,forwarding:fwdChk.checked,
+          capture:capChk.checked,capture_name:capChk.checked?captureName.value.trim():''})});
+      const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      msg.textContent='Spoofing started.';
+    }catch(e){msg.textContent='Error: '+e.message;startBtn.disabled=false}
+    refreshStatus();
+  };
+
+  stopBtn.onclick=async()=>{
+    stopBtn.disabled=true;msg.textContent='Stopping and restoring ARP tables...';
+    try{
+      const r=await fetch('/api/arp/stop',{method:'POST'});
+      const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      let m=j.capture_path?('Stopped. Captured '+j.captured+' packets to '+j.capture_path+'.'):'Stopped and restored.';
+      if(j.warnings&&j.warnings.length)m+=' Warning: '+j.warnings.join(' ');
+      msg.textContent=m;
+    }catch(e){msg.textContent='Error: '+e.message}
+    refreshStatus();
+  };
+
+  return out;
+}};
+
+// ---------- navigation / rendering
+function counts(){
+  if(!derived)return {};
+  return {web:derived.sites.filter(s=>!s.background).length,remote:derived.remote.length,files:derived.files.length,dns:derived.dns.length,
+          network:derived.network.length,all:derived.all.length};
+}
+function renderNav(){
+  const c=counts(),nav=$('#nav');nav.replaceChildren();
+  SECTIONS.forEach(([id,label])=>{
+    const a=h('a',id===current?'active':'',label,c[id]!=null?h('span','n',c[id]):null);
+    a.onclick=()=>go(id);nav.append(a)});
+}
+function go(id){if(arpPoll){clearInterval(arpPoll);arpPoll=null}current=id;renderNav();render()}
+function render(){
+  const v=$('#view');v.replaceChildren();
+  if(current==='arp'){v.append(...VIEWS.arp());return}
+  if(!data){v.append(...header('Welcome','Upload a capture to see what is happening inside it.'),
+    empty('Click "Upload pcap" or drop a .pcap / .pcapng file anywhere on this page.'));return}
+  v.append(...VIEWS[current]());
+}
+function show(d){
+  data=d;selectedClients=null;derived=derive(d);
+  $('#fileinfo').textContent=d.file+' · '+d.events.length+' events';
+  renderClientFilter();
+  go('overview');
+}
+
+// ---------- client filter (show data for one, several, or all clients)
+function applyClientFilter(){derived=derive(data);renderNav();render()}
+function renderClientFilter(){
+  const box=$('#clientFilter');box.replaceChildren();
+  if(!data||data.hosts.length<2){box.style.display='none';return}
+  box.style.display='block';
+  box.append(h('div','cf-title','Clients ('+data.hosts.length+')'));
+  const row=(label,checked,onChange)=>{
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=checked;
+    cb.onchange=()=>onChange(cb.checked);
+    const lab=h('label','cf-row',cb,document.createTextNode(' '+label));
+    box.append(lab);
+  };
+  row('All clients',!selectedClients,on=>{selectedClients=on?null:new Set();renderClientFilter();applyClientFilter()});
+  data.hosts.forEach(hst=>{
+    row(hst.ip+' ('+hst.events+' events)',!selectedClients||selectedClients.has(hst.ip),on=>{
+      const s=selectedClients?new Set(selectedClients):new Set(data.hosts.map(x=>x.ip));
+      if(on)s.add(hst.ip);else s.delete(hst.ip);
+      selectedClients=s.size>=data.hosts.length?null:s;
+      renderClientFilter();applyClientFilter();
+    });
+  });
+}
+
+// ---------- upload
+async function upload(f){
+  if(!f)return;
+  const btn=$('#up'),st=$('#status');
+  btn.disabled=true;st.textContent='Analyzing '+f.name+'…';
+  try{
+    const r=await fetch('/api/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f});
+    const j=await r.json();
+    if(!r.ok)throw new Error(j.error||r.statusText);
+    show(j);st.textContent='';
+  }catch(e){st.textContent='Error: '+e.message}
+  btn.disabled=false;
+}
+$('#up').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{upload(e.target.files[0]);e.target.value=''};
+let dragN=0;
+addEventListener('dragenter',e=>{e.preventDefault();dragN++;$('#drop').style.display='flex'});
+addEventListener('dragleave',e=>{dragN--;if(dragN<=0){dragN=0;$('#drop').style.display='none'}});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();dragN=0;$('#drop').style.display='none';upload(e.dataTransfer.files[0])});
+
+renderNav();render();
+fetch('/api/analysis').then(r=>r.ok?r.json():null).then(d=>{if(d)show(d)});
+</script></body></html>
