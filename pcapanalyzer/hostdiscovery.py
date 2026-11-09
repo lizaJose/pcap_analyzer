@@ -174,9 +174,11 @@ def scan_hosts(interface, cidr):
     return sorted(hosts, key=lambda item: ipaddress.IPv4Address(item["ip"]))
 
 
-def scan_services(interface, cidr, addresses):
-    """Scan the top 100 TCP ports on explicitly selected local IPv4 addresses."""
+def scan_services(interface, cidr, addresses, include_scripts=False):
+    """Scan top TCP ports and optionally run default scripts on discovered open ports."""
     network = _target_network(interface, cidr)
+    if not isinstance(include_scripts, bool):
+        raise ValueError("Script scanning must be enabled or disabled")
     if not isinstance(addresses, list) or not addresses or len(addresses) > MAX_SCAN_ADDRESSES:
         raise ValueError("Provide 1 to 256 discovered host addresses")
     targets = []
@@ -197,7 +199,11 @@ def scan_services(interface, cidr, addresses):
          "--host-timeout", "60s", "-oX", "-", *targets],
         SERVICE_SCAN_TIMEOUT,
     )
-    results = {ip: {"ip": ip, "complete": False, "services": [], "clues": []} for ip in targets}
+    results = {
+        ip: {"ip": ip, "complete": False, "services": [], "clues": [], "scripts": []}
+        for ip in targets
+    }
+    open_ports = set()
     for host in root.findall("host"):
         address = next(
             (item.get("addr") for item in host.findall("address") if item.get("addrtype") == "ipv4"),
@@ -213,15 +219,18 @@ def scan_services(interface, cidr, addresses):
             state = port.find("state")
             if state is None or state.get("state") != "open" or port.get("protocol") != "tcp":
                 continue
+            port_id = port.get("portid", "")
+            open_ports.add(port_id)
             service = port.find("service")
             info = service.attrib if service is not None else {}
             entry["services"].append({
-                "port": port.get("portid", ""),
+                "port": port_id,
                 "name": info.get("name", ""),
                 "product": info.get("product", ""),
                 "version": info.get("version", ""),
                 "extrainfo": info.get("extrainfo", ""),
                 "method": info.get("method", ""),
+                "scripts": [],
             })
             if info.get("method") == "probed":
                 product_type = _guess_device_type(" ".join(
@@ -236,4 +245,32 @@ def scan_services(interface, cidr, addresses):
             elif port.get("portid") == "445":
                 clues.add("SMB: possibly a computer, NAS or other file-sharing device")
         entry["clues"] = sorted(clues)
+
+    if include_scripts and open_ports:
+        script_root = _run_nmap(
+            ["-sC", "-sV", "-p", ",".join(sorted(open_ports, key=int)), "-Pn", "-n",
+             "--host-timeout", "60s", "-oX", "-", *targets],
+            SERVICE_SCAN_TIMEOUT,
+        )
+        for host in script_root.findall("host"):
+            address = next(
+                (item.get("addr") for item in host.findall("address") if item.get("addrtype") == "ipv4"),
+                None,
+            )
+            if address not in results:
+                continue
+            entry = results[address]
+            entry["scripts"] = [
+                {"id": script.get("id", ""), "output": script.get("output", "")}
+                for script in host.findall("./hostscript/script")
+            ]
+            services_by_port = {service["port"]: service for service in entry["services"]}
+            for port in host.findall("./ports/port"):
+                service = services_by_port.get(port.get("portid", ""))
+                if service is None:
+                    continue
+                service["scripts"] = [
+                    {"id": script.get("id", ""), "output": script.get("output", "")}
+                    for script in port.findall("script")
+                ]
     return list(results.values())

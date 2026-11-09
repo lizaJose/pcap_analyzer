@@ -150,6 +150,47 @@ class HostDiscoveryTests(unittest.TestCase):
 
     @patch("pcapanalyzer.hostdiscovery._run_nmap")
     @patch("pcapanalyzer.hostdiscovery.list_interfaces")
+    def test_service_scan_runs_default_scripts_on_discovered_open_ports(self, list_interfaces, run_nmap):
+        list_interfaces.return_value = self.interfaces
+        run_nmap.side_effect = [
+            hostdiscovery.ET.fromstring(
+                '<nmaprun><host><address addr="192.168.1.10" addrtype="ipv4"/>'
+                '<ports><port protocol="tcp" portid="80"><state state="open"/></port>'
+                '<port protocol="tcp" portid="22"><state state="closed"/></port></ports></host>'
+                '<host><address addr="192.168.1.11" addrtype="ipv4"/>'
+                '<ports><port protocol="tcp" portid="443"><state state="open"/></port></ports></host>'
+                '</nmaprun>'
+            ),
+            hostdiscovery.ET.fromstring(
+                '<nmaprun><host><address addr="192.168.1.10" addrtype="ipv4"/>'
+                '<hostscript><script id="host-check" output="Host result"/></hostscript>'
+                '<ports><port protocol="tcp" portid="80">'
+                '<script id="http-title" output="Example page"/></port></ports></host>'
+                '<host><address addr="192.168.1.11" addrtype="ipv4"/>'
+                '<ports><port protocol="tcp" portid="443">'
+                '<script id="tls-check" output="TLS result"/></port></ports></host></nmaprun>'
+            ),
+        ]
+
+        hosts = hostdiscovery.scan_services(
+            "Ethernet", "192.168.1.0/24", ["192.168.1.10", "192.168.1.11"],
+            include_scripts=True,
+        )
+
+        self.assertEqual(hosts[0]["services"][0]["scripts"], [
+            {"id": "http-title", "output": "Example page"},
+        ])
+        self.assertEqual(hosts[0]["scripts"], [{"id": "host-check", "output": "Host result"}])
+        self.assertEqual(hosts[1]["services"][0]["scripts"], [
+            {"id": "tls-check", "output": "TLS result"},
+        ])
+        self.assertEqual(run_nmap.call_args_list[1].args[0], [
+            "-sC", "-sV", "-p", "80,443", "-Pn", "-n", "--host-timeout", "60s",
+            "-oX", "-", "192.168.1.10", "192.168.1.11",
+        ])
+
+    @patch("pcapanalyzer.hostdiscovery._run_nmap")
+    @patch("pcapanalyzer.hostdiscovery.list_interfaces")
     def test_service_scan_rejects_invalid_or_out_of_scope_addresses(self, list_interfaces, run_nmap):
         list_interfaces.return_value = self.interfaces
         for addresses in ([], ["8.8.8.8"], ["192.168.2.1"], ["-sV"], [1], ["::1"], "192.168.1.1",

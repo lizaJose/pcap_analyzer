@@ -135,7 +135,7 @@ function classify(host){
   if(t.some(x=>/^(cdn|edge|cache|media-?cdn)\d*$/.test(x)))return 'CDN & infrastructure';
   return null;
 }
-const SECTIONS=[['overview','Overview'],['web','Websites'],['remote','Remote access'],['files','Files'],['dns','DNS'],['network','Network'],['all','All activity'],['discovery','Host discovery'],['arp','ARP spoofing']];
+const SECTIONS=[['overview','Overview'],['web','Websites'],['remote','Remote access'],['files','Files'],['dns','DNS'],['network','Network'],['all','All activity'],['discovery','Host discovery'],['arp','ARP spoofing'],['wordlist','Wordlist generator']];
 
 let data=null, current='overview', derived=null, arpPoll=null, selectedClients=null;
 
@@ -591,6 +591,89 @@ arp(){
 
   return out;
 },
+wordlist(){
+  const out=[...header('Wordlist generator','Create a targeted wordlist for authorized password audits. No capture is required.')];
+  const cfg=h('div','card'),form=h('form');
+  const fields={};
+  const field=(key,label,placeholder)=>{
+    const input=h('input');input.type='text';input.placeholder=placeholder;input.maxLength=100;
+    input.autocomplete='off';input.setAttribute('aria-label',label);
+    fields[key]=input;
+    return h('label','row',h('span','k',label),h('div','bar',input));
+  };
+  form.append(
+    h('h4','','Profile (all fields optional)'),
+    field('name','First name','e.g. Maria'),field('surname','Surname','e.g. Garcia'),
+    field('nickname','Nickname','e.g. Mari'),field('pet','Pet name','e.g. Luna'),
+    field('partner','Partner name','e.g. Alex'),field('company','Company or team','e.g. Example'),
+    field('year','Birth year (4 digits)','e.g. 1990'),
+    field('keywords','Other words (comma-separated)','e.g. football, summer')
+  );
+  const choices=(title,items)=>{
+    const group=h('fieldset'),inputs=[];
+    group.append(h('legend','',title));
+    items.forEach(([value,label,checked])=>{
+      const input=h('input');input.type='checkbox';input.value=value;input.checked=checked;
+      inputs.push(input);group.append(h('label','row',input,' '+label+' '));
+    });
+    form.append(group);
+    return inputs;
+  };
+  const cases=choices('Capitalization',[
+    ['original','As entered',true],['lower','lowercase',true],
+    ['capitalized','First letter uppercase',true],['upper','UPPERCASE',false]]);
+  const separators=choices('Separators between components',[
+    ['','None',true],['_','Underscore _',true],['-','Hyphen -',false],['.','Dot .',false]]);
+  const suffixes=choices('Suffixes',[
+    ['','None',true],['!','!',false],['123','123',false]]);
+  const shortYear=h('input');shortYear.type='checkbox';
+  form.append(h('label','row',shortYear,' Also use the last two digits of the birth year'));
+  const maxComponents=h('select');maxComponents.setAttribute('aria-label','Maximum components per entry');
+  [1,2,3,4].forEach(value=>{
+    const option=h('option','',String(value));option.value=String(value);maxComponents.append(option);
+  });
+  maxComponents.value='3';
+  form.append(h('label','row',' Maximum components per entry ',maxComponents));
+  const generate=h('button','','Generate wordlist');generate.type='submit';generate.style.width='auto';
+  const download=h('button','','Download .txt');download.type='button';download.disabled=true;download.style.width='auto';
+  const message=h('p','desc','Combines up to the selected number of different inputs in any order. Maximum: 50,000 unique entries.');
+  const preview=h('pre');preview.style.whiteSpace='pre-wrap';preview.style.overflowWrap='anywhere';
+  form.append(h('div','bar',generate,download),message,preview);
+  cfg.append(form);out.push(cfg);
+  let words=null;
+  const selected=inputs=>inputs.filter(input=>input.checked).map(input=>input.value);
+  form.addEventListener('input',()=>{
+    words=null;download.disabled=true;preview.textContent='';
+    message.textContent='Inputs changed. Generate the wordlist again before downloading.';
+  });
+  form.onsubmit=async event=>{
+    event.preventDefault();words=null;download.disabled=true;preview.textContent='';
+    const controls=[...form.querySelectorAll('input, select, button')];
+    controls.forEach(control=>control.disabled=true);
+    message.textContent='Generating...';
+    try{
+      const values=['name','surname','nickname','pet','partner','company'].map(key=>fields[key].value);
+      values.push(...fields.keywords.value.split(','));
+      const response=await fetch('/api/wordlist',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({words:values,year:fields.year.value.trim(),cases:selected(cases),
+          separators:selected(separators),suffixes:selected(suffixes),short_year:shortYear.checked,
+          max_components:Number(maxComponents.value)})});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error||response.statusText);
+      words=result.words;
+      message.textContent=result.count+' unique entries. Preview of the first '+Math.min(30,result.count)+':';
+      preview.textContent=words.slice(0,30).join('\n');
+    }catch(error){message.textContent='Error: '+error.message}
+    controls.forEach(control=>control.disabled=false);download.disabled=!words;
+  };
+  download.onclick=()=>{
+    if(!words)return;
+    const url=URL.createObjectURL(new Blob([words.join('\n')+'\n'],{type:'text/plain;charset=utf-8'}));
+    const link=h('a');link.href=url;link.download='wordlist.txt';link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  return out;
+},
 discovery(){
   const out=[...header('Host discovery','Discover active hosts without a port scan, then optionally inspect services on all discovered hosts. Device types are tentative guesses.')];
   const warn=h('div','card');
@@ -607,10 +690,13 @@ discovery(){
   const msg=h('div','');msg.style.color='var(--yellow)';msg.style.margin='10px 0';
   const results=h('div'),serviceResults=h('div');
   const serviceBtn=h('button','','Scan services on discovered hosts');serviceBtn.style.width='auto';serviceBtn.disabled=true;
-  const serviceInfo=h('p','desc','Optional: probes the 100 most common TCP ports on every discovered host and attempts service identification. This sends additional traffic and may take several minutes.');
+  const scriptsChk=h('input');scriptsChk.type='checkbox';
+  const scriptsLabel=h('label','row',scriptsChk,' Run default Nmap scripts (-sC) on detected open ports');
+  scriptsLabel.style.display='flex';scriptsLabel.style.alignItems='center';scriptsLabel.style.gap='8px';
+  const serviceInfo=h('p','desc','Optional: probes the 100 most common TCP ports and identifies services. The checkbox adds a second -sC -sV pass for ports found open. Script scans send additional traffic and may take several minutes.');
   const cfg=h('div','card');
   cfg.append(h('h4','','Network interface'),h('div','bar',ifaceSel,cidrInput,scanBtn),authorizedLabel);
-  out.push(cfg,msg,results,h('h3','','Optional service scan'),serviceInfo,serviceBtn,serviceResults);
+  out.push(cfg,msg,results,h('h3','','Optional service scan'),serviceInfo,scriptsLabel,serviceBtn,serviceResults);
   let discovered=null;
 
   const renderHosts=hosts=>{
@@ -664,13 +750,17 @@ discovery(){
     if(ifaceSel.value!==discovered.iface||cidrInput.value.trim()!==discovered.cidr){
       msg.textContent='The interface or subnet changed. Discover hosts again before scanning services.';return;
     }
-    if(!confirm('Scan the 100 most common TCP ports and probe services on all '+discovered.hosts.length+
-      ' discovered host(s)? Only continue if you are authorized to test every host.'))return;
+    const scanDescription='Scan the 100 most common TCP ports and probe services on all '+
+      discovered.hosts.length+' discovered host(s)'+
+      (scriptsChk.checked?' then run default Nmap scripts (-sC -sV) on detected open ports':'')+
+      '? Only continue if you are authorized to test every host.';
+    if(!confirm(scanDescription))return;
     serviceBtn.disabled=true;scanBtn.disabled=true;ifaceSel.disabled=true;cidrInput.disabled=true;
     serviceResults.replaceChildren();msg.textContent='Scanning services on '+discovered.hosts.length+' host(s)...';
     try{
       const r=await fetch('/api/discovery/services',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({interface:discovered.iface,cidr:discovered.cidr,hosts:discovered.hosts,authorized:true})});
+        body:JSON.stringify({interface:discovered.iface,cidr:discovered.cidr,hosts:discovered.hosts,
+          authorized:true,scripts:scriptsChk.checked})});
       const j=await r.json();
       if(!r.ok)throw new Error(j.error||r.statusText);
       j.hosts.forEach(host=>{
@@ -681,7 +771,9 @@ discovery(){
           const label=[s.name,s.product,s.version,s.extrainfo].filter(Boolean).join(' ');
           card.append(h('div','row',s.port+'/tcp: '+(label||'unknown service')+
             (s.method==='table'?' (name inferred from port)':'')));
+          (s.scripts||[]).forEach(script=>card.append(h('div','row','NSE '+script.id+': '+script.output)));
         });
+        (host.scripts||[]).forEach(script=>card.append(h('div','row','Host NSE '+script.id+': '+script.output)));
         host.clues.forEach(clue=>card.append(h('div','row','Possible clue: '+clue)));
         serviceResults.append(card);
       });
@@ -710,6 +802,7 @@ function render(){
   const v=$('#view');v.replaceChildren();
   if(current==='arp'){v.append(...VIEWS.arp());return}
   if(current==='discovery'){v.append(...VIEWS.discovery());return}
+  if(current==='wordlist'){v.append(...VIEWS.wordlist());return}
   if(!data){v.append(...header('Welcome','Upload a capture to see what is happening inside it.'),
     empty('Click "Upload pcap" or drop a .pcap / .pcapng file anywhere on this page.'));return}
   v.append(...VIEWS[current]());

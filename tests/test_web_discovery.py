@@ -52,10 +52,19 @@ class WebDiscoveryTests(unittest.TestCase):
         scan_services.assert_not_called()
 
         payload["authorized"] = True
+        payload["scripts"] = "yes"
+        status, response = self.post(payload)
+        self.assertEqual(status, 400)
+        self.assertIn("boolean", response["error"])
+        scan_services.assert_not_called()
+
+        payload["scripts"] = True
         status, response = self.post(payload)
         self.assertEqual(status, 200)
         self.assertEqual(response["hosts"], scan_services.return_value)
-        scan_services.assert_called_once_with("Ethernet", "192.168.1.0/24", ["192.168.1.10"])
+        scan_services.assert_called_once_with(
+            "Ethernet", "192.168.1.0/24", ["192.168.1.10"], include_scripts=True
+        )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 PAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 MAX_UPLOAD = 1024 * 1024 * 1024  # 1 GB
+MAX_WORDLIST_REQUEST = 16384
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
        "connect-src 'self'")
 
@@ -134,7 +135,13 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
                 return self._json(400, {"error": "Confirm that you are authorized to scan this network"})
             try:
                 if services:
-                    hosts = hd.scan_services(body.get("interface"), body.get("cidr"), body.get("hosts"))
+                    include_scripts = body.get("scripts", False)
+                    if not isinstance(include_scripts, bool):
+                        return self._json(400, {"error": "scripts must be a boolean"})
+                    hosts = hd.scan_services(
+                        body.get("interface"), body.get("cidr"), body.get("hosts"),
+                        include_scripts=include_scripts,
+                    )
                 else:
                     hosts = hd.scan_hosts(body.get("interface"), body.get("cidr"))
             except FileNotFoundError as exc:
@@ -148,6 +155,32 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
             except OSError as exc:
                 return self._json(502, {"error": f"Could not run Nmap: {exc}"})
             self._json(200, {"hosts": hosts})
+
+        def _wordlist(self):
+            if not self._is_local_client():
+                return self._json(403, {"error": "Wordlist generation is available only from this computer"})
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                return self._json(411, {"error": "Missing Content-Length"})
+            if length <= 0 or length > MAX_WORDLIST_REQUEST:
+                return self._json(413, {"error": "Wordlist request is empty or too large"})
+            try:
+                body = self._read_json()
+            except (ValueError, UnicodeDecodeError):
+                return self._json(400, {"error": "Invalid JSON body"})
+            if not isinstance(body, dict):
+                return self._json(400, {"error": "Invalid request body"})
+            from .wordlist import generate_wordlist
+            try:
+                candidates = generate_wordlist(
+                    body.get("words"), body.get("year", ""), body.get("cases"),
+                    body.get("separators"), body.get("suffixes"), body.get("short_year", False),
+                    body.get("max_components", 3),
+                )
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+            self._json(200, {"count": len(candidates), "words": candidates})
 
         def _arp_start(self):
             try:
@@ -302,6 +335,8 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
                 self._host_discovery()
             elif path == "/api/discovery/services":
                 self._host_discovery(services=True)
+            elif path == "/api/wordlist":
+                self._wordlist()
             else:
                 self.send_error(404)
 

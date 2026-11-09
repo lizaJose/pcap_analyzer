@@ -10,6 +10,7 @@ from datetime import datetime
 
 from .analyzer import Analyzer
 from .webserver import serve
+from .wordlist import MAX_CANDIDATES, MAX_COMPONENTS, generate_wordlist
 
 os.system("")  # enable ANSI colors in the Windows console
 
@@ -44,6 +45,27 @@ def _pager(lines):
             ans = input(f"{D}-- {min(i + PAGE_SIZE, len(lines))}/{len(lines)} · Enter = more, q = stop -- {X}")
             if ans.strip().lower() == "q":
                 break
+
+
+def _select_wordlist_options(title, options, defaults):
+    print(f"\n  {title}:")
+    for number, (label, _) in enumerate(options, 1):
+        print(f"   {number}) {label}")
+    default_text = ",".join(str(number) for number in defaults)
+    while True:
+        selected = input(f"  Select numbers separated by commas [{default_text}]: ").strip()
+        if not selected:
+            numbers = defaults
+        else:
+            values = [value.strip() for value in selected.split(",")]
+            if not all(value.isascii() and value.isdigit() for value in values):
+                print(f"{R}  Enter valid option numbers separated by commas.{X}")
+                continue
+            numbers = [int(value) for value in values]
+        if not all(1 <= number <= len(options) for number in numbers):
+            print(f"{R}  Enter valid option numbers separated by commas.{X}")
+            continue
+        return [options[number - 1][1] for number in dict.fromkeys(numbers)]
 
 
 class Menu:
@@ -140,6 +162,70 @@ class Menu:
     def web(self):
         analyze = lambda p: Analyzer(p, self.tshark).analyze()
         self.result = serve(analyze, self.result, self.host, self.port) or self.result
+
+    def wordlist(self):
+        print(f"\n{C}  Wordlist generator{X}")
+        print(f"{Y}  Use only for authorized password audits. Profile fields are optional.{X}")
+        words = [
+            input(f"  {label}: ").strip()
+            for label in ("First name", "Surname", "Nickname", "Pet name", "Partner name", "Company or team")
+        ]
+        year = input("  Birth year (4 digits): ").strip()
+        words.extend(input("  Other words (comma-separated): ").split(","))
+        cases = _select_wordlist_options("Capitalization", [
+            ("As entered", "original"), ("lowercase", "lower"), ("First letter uppercase", "capitalized"),
+            ("UPPERCASE", "upper"),
+        ], [1, 2, 3])
+        separators = _select_wordlist_options("Separators between components", [
+            ("None", ""), ("Underscore _", "_"), ("Hyphen -", "-"), ("Dot .", "."),
+        ], [1, 2])
+        suffixes = _select_wordlist_options("Suffixes", [
+            ("None", ""), ("!", "!"), ("123", "123"),
+        ], [1])
+        while True:
+            answer = input("  Also use the last two digits of the birth year? [y/N] ").strip().lower()
+            if answer in ("", "n", "no", "y", "yes"):
+                short_year = answer in ("y", "yes")
+                break
+            print(f"{R}  Enter y or n.{X}")
+        while True:
+            value = input(f"  Maximum components per entry (1-{MAX_COMPONENTS}) [3]: ").strip() or "3"
+            if value.isascii() and value.isdigit() and 1 <= int(value) <= MAX_COMPONENTS:
+                max_components = int(value)
+                break
+            print(f"{R}  Enter a number from 1 to {MAX_COMPONENTS}.{X}")
+        try:
+            candidates = generate_wordlist(words, year, cases, separators, suffixes, short_year, max_components)
+        except ValueError as exc:
+            print(f"{R}  Error: {exc}{X}")
+            return
+        print(f"\n{G}  {len(candidates):,} unique entries{X} (limit: {MAX_CANDIDATES:,}).")
+        print(f"  Preview of the first {min(30, len(candidates))}:")
+        for candidate in candidates[:30]:
+            print(f"    {candidate}")
+        while True:
+            answer = input("  Save the complete wordlist? [y/N] ").strip().lower()
+            if answer in ("", "n", "no"):
+                return
+            if answer in ("y", "yes"):
+                break
+            print(f"{R}  Enter y or n.{X}")
+        while True:
+            path = input("  Save to [wordlist.txt] (or q to cancel): ").strip().strip('"') or "wordlist.txt"
+            if path.lower() == "q":
+                print(f"{Y}  Save cancelled.{X}")
+                return
+            try:
+                with open(path, "x", encoding="utf-8", newline="\n") as file:
+                    file.write("\n".join(candidates) + "\n")
+            except FileExistsError:
+                print(f"{R}  File already exists; choose a different path.{X}")
+                continue
+            except OSError as exc:
+                print(f"{R}  Could not save wordlist: {exc}{X}")
+                continue
+            print(f"{G}  Saved {len(candidates):,} entries to {path}{X}")
+            return
 
     # ---------------------------------------------------------- ARP spoofing
     def arp_spoof(self):
@@ -293,7 +379,8 @@ class Menu:
         if initial:
             self.load(initial)
         actions = {"1": self.load, "2": self.hosts, "3": self.activity, "4": self.by_category,
-                   "5": self.search, "6": self.stats, "7": self.export, "8": self.web, "9": self.arp_spoof}
+                   "5": self.search, "6": self.stats, "7": self.export, "8": self.web, "9": self.arp_spoof,
+                   "10": self.wordlist}
         while True:
             loaded = f"{G}{self.result['file']}{X}" if self.result else f"{Y}none{X}"
             width = shutil.get_terminal_size().columns
@@ -301,7 +388,8 @@ class Menu:
             print("   1) Load a pcap\n   2) Summary by host\n   3) Show all activity\n"
                   "   4) Show by category\n   5) Search\n   6) Statistics\n"
                   "   7) Export to JSON\n   8) Open web interface (with file upload)\n"
-                  "   9) ARP spoofing / MITM (authorized testing only)\n   0) Exit")
+                  "   9) ARP spoofing / MITM (authorized testing only)\n"
+                  "  10) Wordlist generator (authorized testing only)\n   0) Exit")
             try:
                 choice = input(f"\n{C}pcap>{X} ").strip()
                 if choice in ("0", "q", "exit", "quit"):
