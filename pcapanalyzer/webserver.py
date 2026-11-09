@@ -1,6 +1,8 @@
 """Local web server (standard library only) to browse the analysis."""
+import ipaddress
 import json
 import os
+import subprocess
 import tempfile
 import threading
 import time
@@ -39,6 +41,12 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
 
         def _json(self, code, obj):
             self._send(code, "application/json", json.dumps(obj).encode())
+
+        def _is_local_client(self):
+            try:
+                return ipaddress.ip_address(self.client_address[0]).is_loopback
+            except ValueError:
+                return False
 
         def _arp_status(self):
             with arp_lock:
@@ -94,12 +102,52 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
                     self._json(400, {"error": str(exc)})
             elif path == "/api/arp/status":
                 self._json(200, self._arp_status())
+            elif path == "/api/discovery/interfaces":
+                if not self._is_local_client():
+                    return self._json(403, {"error": "Host discovery is available only from this computer"})
+                try:
+                    from . import hostdiscovery as hd
+                except ImportError:
+                    return self._json(501, {"error": "Scapy is not installed"})
+                self._json(200, {"interfaces": hd.list_interfaces()})
             else:
                 self.send_error(404)
 
         def _read_json(self):
             length = int(self.headers.get("Content-Length", "0") or 0)
             return json.loads(self.rfile.read(length) or b"{}")
+
+        def _host_discovery(self, services=False):
+            if not self._is_local_client():
+                return self._json(403, {"error": "Host discovery is available only from this computer"})
+            try:
+                from . import hostdiscovery as hd
+            except ImportError:
+                return self._json(501, {"error": "Scapy is not installed"})
+            try:
+                body = self._read_json()
+            except ValueError:
+                return self._json(400, {"error": "Invalid JSON body"})
+            if not isinstance(body, dict):
+                return self._json(400, {"error": "Invalid request body"})
+            if body.get("authorized") is not True:
+                return self._json(400, {"error": "Confirm that you are authorized to scan this network"})
+            try:
+                if services:
+                    hosts = hd.scan_services(body.get("interface"), body.get("cidr"), body.get("hosts"))
+                else:
+                    hosts = hd.scan_hosts(body.get("interface"), body.get("cidr"))
+            except FileNotFoundError as exc:
+                return self._json(501, {"error": str(exc)})
+            except subprocess.TimeoutExpired:
+                return self._json(504, {"error": "Nmap scan timed out"})
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+            except RuntimeError as exc:
+                return self._json(502, {"error": str(exc)})
+            except OSError as exc:
+                return self._json(502, {"error": f"Could not run Nmap: {exc}"})
+            self._json(200, {"hosts": hosts})
 
         def _arp_start(self):
             try:
@@ -250,6 +298,10 @@ def serve(analyze, result=None, host="127.0.0.1", port=8000):
                 self._arp_start()
             elif path == "/api/arp/stop":
                 self._arp_stop()
+            elif path == "/api/discovery/scan":
+                self._host_discovery()
+            elif path == "/api/discovery/services":
+                self._host_discovery(services=True)
             else:
                 self.send_error(404)
 

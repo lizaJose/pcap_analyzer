@@ -135,7 +135,7 @@ function classify(host){
   if(t.some(x=>/^(cdn|edge|cache|media-?cdn)\d*$/.test(x)))return 'CDN & infrastructure';
   return null;
 }
-const SECTIONS=[['overview','Overview'],['web','Websites'],['remote','Remote access'],['files','Files'],['dns','DNS'],['network','Network'],['all','All activity'],['arp','ARP spoofing']];
+const SECTIONS=[['overview','Overview'],['web','Websites'],['remote','Remote access'],['files','Files'],['dns','DNS'],['network','Network'],['all','All activity'],['discovery','Host discovery'],['arp','ARP spoofing']];
 
 let data=null, current='overview', derived=null, arpPoll=null, selectedClients=null;
 
@@ -590,6 +590,107 @@ arp(){
   };
 
   return out;
+},
+discovery(){
+  const out=[...header('Host discovery','Discover active hosts without a port scan, then optionally inspect services on all discovered hosts. Device types are tentative guesses.')];
+  const warn=h('div','card');
+  warn.append(h('h4','',badge('Authorized networks only','bad')),
+    h('div','row','Use this only on a network you own or are explicitly authorized to test. Scans are limited to private subnets connected to this computer and at most 256 addresses.'));
+  out.push(warn);
+
+  const ifaceSel=h('select'),cidrInput=h('input'),scanBtn=h('button','','Discover hosts');
+  cidrInput.type='text';cidrInput.placeholder='Private subnet (e.g. 192.168.1.0/24)';
+  scanBtn.style.width='auto';
+  const authorized=h('input');authorized.type='checkbox';
+  const authorizedLabel=h('label','row',authorized,' I am authorized to scan this network.');
+  authorizedLabel.style.display='flex';authorizedLabel.style.alignItems='center';authorizedLabel.style.gap='8px';
+  const msg=h('div','');msg.style.color='var(--yellow)';msg.style.margin='10px 0';
+  const results=h('div'),serviceResults=h('div');
+  const serviceBtn=h('button','','Scan services on discovered hosts');serviceBtn.style.width='auto';serviceBtn.disabled=true;
+  const serviceInfo=h('p','desc','Optional: probes the 100 most common TCP ports on every discovered host and attempts service identification. This sends additional traffic and may take several minutes.');
+  const cfg=h('div','card');
+  cfg.append(h('h4','','Network interface'),h('div','bar',ifaceSel,cidrInput,scanBtn),authorizedLabel);
+  out.push(cfg,msg,results,h('h3','','Optional service scan'),serviceInfo,serviceBtn,serviceResults);
+  let discovered=null;
+
+  const renderHosts=hosts=>{
+    results.replaceChildren();
+    if(!hosts.length){results.append(empty('No active hosts were found.'));return}
+    const body=h('tbody');
+    hosts.forEach(host=>body.append(h('tr','',h('td','',host.ip),h('td','',host.hostname||'—'),
+      h('td','',host.mac||'—'),h('td','',host.mac_randomized?'Private/local MAC':host.vendor||'—'),
+      h('td','',host.device_type?host.device_type+' (guess)':'Unknown'))));
+    results.append(h('table','',h('thead','',h('tr','',h('th','','IP address'),h('th','','Hostname'),
+      h('th','','MAC address'),h('th','','Manufacturer'),h('th','','Device type'))),body));
+  };
+  (async()=>{
+    msg.textContent='Loading local private networks...';
+    try{
+      const r=await fetch('/api/discovery/interfaces'),j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      j.interfaces.forEach((iface,index)=>{
+        const o=h('option','',iface.description+' ('+iface.ip+') · '+iface.network);
+        o.value=iface.name;o.dataset.network=iface.network;ifaceSel.append(o);
+        if(index===0)cidrInput.value=iface.network;
+      });
+      msg.textContent=j.interfaces.length?'Only directly connected private networks are available.':
+        'No directly connected private IPv4 networks were found.';
+      scanBtn.disabled=!j.interfaces.length;
+    }catch(e){msg.textContent='Error: '+e.message;scanBtn.disabled=true}
+  })();
+  ifaceSel.onchange=()=>{
+    const selected=ifaceSel.selectedOptions[0];
+    if(selected&&selected.dataset.network)cidrInput.value=selected.dataset.network;
+  };
+  scanBtn.onclick=async()=>{
+    if(!authorized.checked){msg.textContent='Confirm that you are authorized to scan this network.';return}
+    const iface=ifaceSel.value,cidr=cidrInput.value.trim();
+    discovered=null;serviceBtn.disabled=true;serviceResults.replaceChildren();results.replaceChildren();
+    scanBtn.disabled=true;ifaceSel.disabled=true;cidrInput.disabled=true;msg.textContent='Running Nmap host discovery...';
+    try{
+      const r=await fetch('/api/discovery/scan',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({interface:iface,cidr,authorized:true})});
+      const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      discovered={iface,cidr,hosts:j.hosts.map(host=>host.ip)};
+      serviceBtn.disabled=!discovered.hosts.length;
+      renderHosts(j.hosts);msg.textContent=j.hosts.length+' host(s) found on '+cidr+'.';
+    }catch(e){msg.textContent='Error: '+e.message}
+    scanBtn.disabled=false;ifaceSel.disabled=false;cidrInput.disabled=false;
+  };
+  serviceBtn.onclick=async()=>{
+    if(!discovered||!discovered.hosts.length)return;
+    if(!authorized.checked){msg.textContent='Confirm that you are authorized to scan these hosts.';return}
+    if(ifaceSel.value!==discovered.iface||cidrInput.value.trim()!==discovered.cidr){
+      msg.textContent='The interface or subnet changed. Discover hosts again before scanning services.';return;
+    }
+    if(!confirm('Scan the 100 most common TCP ports and probe services on all '+discovered.hosts.length+
+      ' discovered host(s)? Only continue if you are authorized to test every host.'))return;
+    serviceBtn.disabled=true;scanBtn.disabled=true;ifaceSel.disabled=true;cidrInput.disabled=true;
+    serviceResults.replaceChildren();msg.textContent='Scanning services on '+discovered.hosts.length+' host(s)...';
+    try{
+      const r=await fetch('/api/discovery/services',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({interface:discovered.iface,cidr:discovered.cidr,hosts:discovered.hosts,authorized:true})});
+      const j=await r.json();
+      if(!r.ok)throw new Error(j.error||r.statusText);
+      j.hosts.forEach(host=>{
+        const card=h('div','card',h('h4','',host.ip));
+        if(!host.complete)card.append(h('div','row','Scan incomplete or timed out for this host.'));
+        else if(!host.services.length)card.append(h('div','row','No open ports found among the 100 scanned TCP ports.'));
+        else host.services.forEach(s=>{
+          const label=[s.name,s.product,s.version,s.extrainfo].filter(Boolean).join(' ');
+          card.append(h('div','row',s.port+'/tcp: '+(label||'unknown service')+
+            (s.method==='table'?' (name inferred from port)':'')));
+        });
+        host.clues.forEach(clue=>card.append(h('div','row','Possible clue: '+clue)));
+        serviceResults.append(card);
+      });
+      const incomplete=j.hosts.filter(host=>!host.complete).length;
+      msg.textContent='Service scan finished.'+(incomplete?' '+incomplete+' host(s) incomplete or timed out.':'');
+    }catch(e){msg.textContent='Error: '+e.message}
+    serviceBtn.disabled=false;scanBtn.disabled=false;ifaceSel.disabled=false;cidrInput.disabled=false;
+  };
+  return out;
 }};
 
 // ---------- navigation / rendering
@@ -608,6 +709,7 @@ function go(id){if(arpPoll){clearInterval(arpPoll);arpPoll=null}current=id;rende
 function render(){
   const v=$('#view');v.replaceChildren();
   if(current==='arp'){v.append(...VIEWS.arp());return}
+  if(current==='discovery'){v.append(...VIEWS.discovery());return}
   if(!data){v.append(...header('Welcome','Upload a capture to see what is happening inside it.'),
     empty('Click "Upload pcap" or drop a .pcap / .pcapng file anywhere on this page.'));return}
   v.append(...VIEWS[current]());

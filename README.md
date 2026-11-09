@@ -35,6 +35,20 @@ Notes: HTTPS traffic only reveals the domain (SNI), not the content. FTP passwor
 Browse traffic by category, including websites, remote access, file transfers, DNS, and network activity. Upload a capture
 with the button or by dragging it onto the page.
 
+The **Host discovery** section can run `nmap -sn` on a directly connected private IPv4 subnet. It is limited to
+RFC1918 networks and 256 addresses per scan. Install Nmap and make sure `nmap` is on `PATH`; on Windows the
+standard Nmap installation folders are also checked. Restart the application after installation if needed. Only
+scan networks you own or are explicitly authorized to test.
+The results include reverse-DNS hostnames, MAC addresses and manufacturers when Nmap can obtain them. The device
+type is only a tentative guess based on recognizable hostname text; an unknown type does not mean the host is absent.
+Private or locally administered MAC addresses do not reliably identify a manufacturer. Names, MAC addresses and
+vendors may be unavailable depending on DNS, the network and privileges.
+After host discovery, an optional service scan probes Nmap's 100 most common TCP ports on every discovered host
+and uses light version detection. This sends additional traffic and may take several minutes. Only run it when
+authorized to test every host. Open services and any device clues based on port numbers or Nmap's identified
+products are not conclusive identification; hosts may time out, and closed or unscanned ports cannot establish
+a device type.
+
 ## ARP spoofing / MITM (authorized testing only)
 Only use this feature on networks and devices you are authorized to test. ARP spoofing can disrupt network
 operation and expose traffic.
